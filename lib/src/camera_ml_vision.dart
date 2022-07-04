@@ -9,7 +9,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
-import 'package:visibility_detector/visibility_detector.dart';
 
 part 'utils.dart';
 
@@ -33,7 +32,7 @@ enum _CameraState {
   ready,
 }
 
-class CameraMlVision<T> extends StatefulWidget {
+class CameraFaceDetector<T> extends StatefulWidget {
   final HandleDetection<T> detector;
   final Function(T) onResult;
   final WidgetBuilder? loadingBuilder;
@@ -44,7 +43,7 @@ class CameraMlVision<T> extends StatefulWidget {
   final HandlerError? onError;
   final Function? onDispose;
 
-  const CameraMlVision({
+  const CameraFaceDetector({
     Key? key,
     required this.onResult,
     required this.detector,
@@ -58,20 +57,18 @@ class CameraMlVision<T> extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  CameraMlVisionState createState() => CameraMlVisionState<T>();
+  CameraFaceDetectorState createState() => CameraFaceDetectorState<T>();
 }
 
-class CameraMlVisionState<T> extends State<CameraMlVision<T>>
+class CameraFaceDetectorState<T> extends State<CameraFaceDetector<T>>
     with WidgetsBindingObserver {
   XFile? _lastImage;
-  final _visibilityKey = UniqueKey();
   CameraController? _cameraController;
   InputImageRotation? _rotation;
   _CameraState _cameraMlVisionState = _CameraState.loading;
   CameraError _cameraError = CameraError.unknown;
   bool isBusy = false;
   bool _isStreaming = false;
-  bool _isDeactivate = false;
 
   @override
   void initState() {
@@ -81,7 +78,7 @@ class CameraMlVisionState<T> extends State<CameraMlVision<T>>
   }
 
   @override
-  void didUpdateWidget(CameraMlVision<T> oldWidget) {
+  void didUpdateWidget(CameraFaceDetector<T> oldWidget) {
     if (oldWidget.resolution != widget.resolution) {
       _initialize();
     }
@@ -91,7 +88,8 @@ class CameraMlVisionState<T> extends State<CameraMlVision<T>>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // App state changed before we got the chance to initialize.
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+    if (_cameraController == null ||
+        _cameraController?.value.isInitialized == false) {
       return;
     }
     if (state == AppLifecycleState.inactive) {
@@ -141,15 +139,15 @@ class CameraMlVisionState<T> extends State<CameraMlVision<T>>
     return completer.future;
   }
 
-  void start() {
+  void start() async {
     if (_cameraController != null) {
-      _start();
+      await _start();
     }
   }
 
-  void _start() {
-    if (_cameraController?.value.isStreamingImages ?? false) return;
-    _cameraController?.startImageStream(_processImage);
+  Future<void> _start() async {
+    if (_cameraController?.value.isStreamingImages ?? true) return;
+    await _cameraController?.startImageStream(_processImage);
     setState(() {
       _isStreaming = true;
     });
@@ -177,9 +175,11 @@ class CameraMlVisionState<T> extends State<CameraMlVision<T>>
 
   Future<XFile> takePicture(String path) async {
     await _stop(true);
+    await Future.delayed(const Duration(milliseconds: 200));
     try {
       final image = await _cameraController?.takePicture();
-      _start();
+      await Future.delayed(const Duration(milliseconds: 200));
+      await _start();
       return image!;
     } on PlatformException catch (e) {
       debugPrint('$e');
@@ -290,14 +290,12 @@ class CameraMlVisionState<T> extends State<CameraMlVision<T>>
 
   @override
   void dispose() {
-    if (widget.onDispose != null) {
-      widget.onDispose?.call();
-    }
+    widget.onDispose?.call();
+
     if (_cameraController != null) {
-      _stop(true).then((value) {
-        _cameraController?.dispose();
-      });
+      _cameraController!.dispose();
     }
+    WidgetsBinding.instance.removeObserver(this);
 
     super.dispose();
   }
@@ -331,27 +329,14 @@ class CameraMlVisionState<T> extends State<CameraMlVision<T>>
                   aspectRatio: _isLandscape()
                       ? cameraController!.value.aspectRatio
                       : (1 / cameraController!.value.aspectRatio),
-                  child: widget.overlayBuilder?.call(context) ?? Container(),
+                  child:
+                      widget.overlayBuilder?.call(context) ?? const SizedBox(),
                 )
-              : Container(),
+              : const SizedBox(),
         ],
       );
     }
-    return VisibilityDetector(
-      onVisibilityChanged: (VisibilityInfo info) {
-        if (info.visibleFraction == 0) {
-          //invisible stop the streaming
-          _isDeactivate = true;
-          _stop(true);
-        } else if (_isDeactivate) {
-          //visible restart streaming if needed
-          _isDeactivate = false;
-          _start();
-        }
-      },
-      key: _visibilityKey,
-      child: cameraPreview,
-    );
+    return cameraPreview;
   }
 
   DeviceOrientation? _getApplicableOrientation() {
@@ -390,9 +375,9 @@ class CameraMlVisionState<T> extends State<CameraMlVision<T>>
     }
   }
 
-  void toggle() {
+  void toggle() async {
     if (_isStreaming && _cameraController!.value.isStreamingImages) {
-      stop();
+      await stop();
     } else {
       start();
     }
@@ -402,6 +387,6 @@ class CameraMlVisionState<T> extends State<CameraMlVision<T>>
     if (_lastImage != null) {
       return Image.file(File(_lastImage!.path));
     }
-    return Container();
+    return const SizedBox();
   }
 }
