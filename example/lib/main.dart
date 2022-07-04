@@ -29,7 +29,7 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   List<Face> _faces = [];
-  final _scanKey = GlobalKey<CameraMlVisionState>();
+  final _scanKey = GlobalKey<CameraFaceDetectorState>();
   CameraLensDirection cameraLensDirection = CameraLensDirection.front;
   FaceDetector detector = FaceDetector(
       options: FaceDetectorOptions(
@@ -49,7 +49,7 @@ class _MyHomePageState extends State<MyHomePage> {
         title: Text(widget.title),
       ),
       body: SizedBox.expand(
-        child: CameraMlVision<List<Face>>(
+        child: CameraFaceDetector<List<Face>>(
           key: _scanKey,
           cameraLensDirection: cameraLensDirection,
           detector: detector.processImage,
